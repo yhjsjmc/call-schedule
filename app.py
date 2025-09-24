@@ -1,18 +1,8 @@
 import streamlit as st
 import pandas as pd
 import os
+import glob
 from datetime import datetime, timedelta
-
-# -------------------------------
-# Config: Google Drive file IDs
-# -------------------------------
-SCHEDULE_FILES = {
-    "2025-07": "1yInjshMiRxpqIn-7gzhRV5W-0p5BunMF",
-    "2025-08": "1rrmhAONf0dSpIJmThI17B2Gctvxbr4MZ",
-    "2025-09": "1Ewx4_5b6a54T9oN8Feu8wRCZDQuO1ROn",
-    "2025-10": "1BPAMWaWcYDhhaS6FWi-r74tW8oQFrWD3",
-    "2025-11": "1EUhzivClMvnLupEWLlQDMBzGMr17-fWQ",
-}
 
 # -------------------------------
 # Tidy conversion function
@@ -68,31 +58,34 @@ def convert_schedule_to_tidy(df, base_year=None, base_month=None):
         tidy_df["Date"] = pd.to_datetime(tidy_df["Date"]).dt.date
     return tidy_df
 
+# -------------------------------
+# Load all schedules in schedules/
+# -------------------------------
+def load_all_schedules():
+    tidy_list = []
+    files = glob.glob("schedules/*.xlsx")
+    for filepath in sorted(files):
+        try:
+            fname = os.path.splitext(os.path.basename(filepath))[0]  # e.g. 2025-07
+            year, month = map(int, fname.split("-"))
+            df_raw = pd.read_excel(filepath, header=None)
+            tidy = convert_schedule_to_tidy(df_raw, base_year=year, base_month=month)
+            if not tidy.empty:
+                tidy_list.append(tidy)
+        except Exception as e:
+            st.error(f"Error reading {filepath}: {e}")
+    if tidy_list:
+        return pd.concat(tidy_list, ignore_index=True)
+    return pd.DataFrame()
 
 # -------------------------------
 # Streamlit App
 # -------------------------------
-st.title("📅 Call Schedule Viewer (Google Drive)")
+st.title("📅 Call Schedule Viewer")
 
-tidy_list = []
+full_schedule = load_all_schedules()
 
-for fname, file_id in SCHEDULE_FILES.items():
-    try:
-        year, month = map(int, fname.split("-"))
-        url = f"https://drive.google.com/uc?id={file_id}"
-
-        # Read Excel directly from Google Drive
-        df_raw = pd.read_excel(url, header=None)
-
-        tidy = convert_schedule_to_tidy(df_raw, base_year=year, base_month=month)
-        if not tidy.empty:
-            tidy_list.append(tidy)
-    except Exception as e:
-        st.error(f"Error reading {fname}: {e}")
-
-if tidy_list:
-    full_schedule = pd.concat(tidy_list, ignore_index=True)
-
+if not full_schedule.empty:
     today = datetime.today().date()
     chosen_date = st.date_input("Pick a date", value=today)
 
@@ -101,7 +94,6 @@ if tidy_list:
     if not day_schedule.empty:
         st.subheader(f"Schedule for {chosen_date}")
 
-        # Build HTML table manually
         rows = []
         for _, r in day_schedule.iterrows():
             shift = r["Shift"]
@@ -120,4 +112,4 @@ if tidy_list:
     else:
         st.warning(f"No schedule found for {chosen_date}")
 else:
-    st.error("No valid schedule data could be loaded from Google Drive.")
+    st.error("No valid schedule data could be loaded from schedules/")
