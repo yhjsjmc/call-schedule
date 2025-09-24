@@ -1,0 +1,5 @@
+﻿venv/
+schedules/
+__pycache__/
+*.pyc
+*.xlsx
