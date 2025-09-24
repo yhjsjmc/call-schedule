@@ -1,13 +1,11 @@
 import streamlit as st
 import pandas as pd
-import gdown
 import os
 from datetime import datetime, timedelta
 
 # -------------------------------
 # Config: Google Drive file IDs
 # -------------------------------
-# Replace these with your own file IDs
 SCHEDULE_FILES = {
     "2025-07": "1yInjshMiRxpqIn-7gzhRV5W-0p5BunMF",
     "2025-08": "1rrmhAONf0dSpIJmThI17B2Gctvxbr4MZ",
@@ -15,6 +13,7 @@ SCHEDULE_FILES = {
     "2025-10": "1BPAMWaWcYDhhaS6FWi-r74tW8oQFrWD3",
     "2025-11": "1EUhzivClMvnLupEWLlQDMBzGMr17-fWQ",
 }
+
 # -------------------------------
 # Tidy conversion function
 # -------------------------------
@@ -22,9 +21,9 @@ def convert_schedule_to_tidy(df, base_year=None, base_month=None):
     base_date = datetime(base_year, base_month, 1)
     tidy_data = []
     holiday_dates = set()
-    days = df.columns[1:]
+    days = df.columns[1:]  # skip first column (shift names)
 
-    for i in range(1, len(df), 9):
+    for i in range(1, len(df), 9):  # every 9 rows = 1 week
         week = df.iloc[i:i+9].reset_index(drop=True)
         if week.shape[0] < 2:
             continue
@@ -81,13 +80,10 @@ for fname, file_id in SCHEDULE_FILES.items():
     try:
         year, month = map(int, fname.split("-"))
         url = f"https://drive.google.com/uc?id={file_id}"
-        local_path = f"{fname}.xlsx"
 
-        # Download from Google Drive
-        gdown.download(url, local_path, quiet=True)
+        # Read Excel directly from Google Drive
+        df_raw = pd.read_excel(url, header=None)
 
-        # Read Excel
-        df_raw = pd.read_excel(local_path, header=None)
         tidy = convert_schedule_to_tidy(df_raw, base_year=year, base_month=month)
         if not tidy.empty:
             tidy_list.append(tidy)
