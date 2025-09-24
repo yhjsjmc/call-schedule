@@ -1,35 +1,38 @@
 import streamlit as st
 import pandas as pd
-import glob
+import gdown
 import os
 from datetime import datetime, timedelta
 
 # -------------------------------
+# Config: Google Drive file IDs
+# -------------------------------
+# Replace these with your own file IDs
+SCHEDULE_FILES = {
+    "2025-07": "1yInjshMiRxpqIn-7gzhRV5W-0p5BunMF",
+    "2025-08": "1rrmhAONf0dSpIJmThI17B2Gctvxbr4MZ",
+    "2025-09": "1Ewx4_5b6a54T9oN8Feu8wRCZDQuO1ROn",
+    "2025-10": "1BPAMWaWcYDhhaS6FWi-r74tW8oQFrWD3",
+    "2025-11": "1EUhzivClMvnLupEWLlQDMBzGMr17-fWQ",
+}
+# -------------------------------
 # Tidy conversion function
 # -------------------------------
 def convert_schedule_to_tidy(df, base_year=None, base_month=None):
-    if base_year is None or base_month is None:
-        raise ValueError("Must provide base_year and base_month")
-
     base_date = datetime(base_year, base_month, 1)
     tidy_data = []
     holiday_dates = set()
-    days = df.columns[1:]  # skip first column (shift names)
+    days = df.columns[1:]
 
-    # Skip row 0 (weekday headers), then process in 9-row blocks
-    for i in range(1, len(df), 9):  # every 9 rows = 1 week
+    for i in range(1, len(df), 9):
         week = df.iloc[i:i+9].reset_index(drop=True)
         if week.shape[0] < 2:
             continue
 
-        # First row of the block = dates
         date_row = week.iloc[0, 1:].values
-
-        # Skip if blank week
         if all(pd.isna(x) for x in date_row):
             continue
 
-        # Shifts = rows 1–8 of the block
         for row in range(1, week.shape[0]):
             shift_type = str(week.iloc[row, 0]).strip().upper()
             if pd.isna(shift_type):
@@ -62,67 +65,63 @@ def convert_schedule_to_tidy(df, base_year=None, base_month=None):
                         })
 
     tidy_df = pd.DataFrame(tidy_data)
-
-    # Ensure Date is plain date, not Timestamp
     if not tidy_df.empty:
         tidy_df["Date"] = pd.to_datetime(tidy_df["Date"]).dt.date
-
     return tidy_df
 
 
 # -------------------------------
 # Streamlit App
 # -------------------------------
-st.title("📅 Call Schedule Viewer")
+st.title("📅 Call Schedule Viewer (Google Drive)")
 
-all_files = glob.glob("schedules/*.xlsx")
+tidy_list = []
 
-if not all_files:
-    st.error("No schedules found. Developer: please add Excel files in the 'schedules/' folder.")
-else:
-    tidy_list = []
-    for file in all_files:
-        try:
-            fname = os.path.basename(file).replace(".xlsx", "")
-            year, month = map(int, fname.split("-"))
-            df_raw = pd.read_excel(file, header=None)
-            tidy = convert_schedule_to_tidy(df_raw, base_year=year, base_month=month)
-            if not tidy.empty:
-                tidy_list.append(tidy)
-        except Exception as e:
-            st.error(f"Error reading {file}: {e}")
+for fname, file_id in SCHEDULE_FILES.items():
+    try:
+        year, month = map(int, fname.split("-"))
+        url = f"https://drive.google.com/uc?id={file_id}"
+        local_path = f"{fname}.xlsx"
 
-    if tidy_list:
-        full_schedule = pd.concat(tidy_list, ignore_index=True)
+        # Download from Google Drive
+        gdown.download(url, local_path, quiet=True)
 
-        today = datetime.today().date()
-        chosen_date = st.date_input("Pick a date", value=today)
+        # Read Excel
+        df_raw = pd.read_excel(local_path, header=None)
+        tidy = convert_schedule_to_tidy(df_raw, base_year=year, base_month=month)
+        if not tidy.empty:
+            tidy_list.append(tidy)
+    except Exception as e:
+        st.error(f"Error reading {fname}: {e}")
 
-        day_schedule = full_schedule[full_schedule["Date"] == chosen_date]
+if tidy_list:
+    full_schedule = pd.concat(tidy_list, ignore_index=True)
 
-        if not day_schedule.empty:
-            st.subheader(f"Schedule for {chosen_date}")
+    today = datetime.today().date()
+    chosen_date = st.date_input("Pick a date", value=today)
 
-            display_df = day_schedule[["Shift", "Person"]].copy()
+    day_schedule = full_schedule[full_schedule["Date"] == chosen_date]
 
-            # Build custom HTML table (no headers, no index)
-            rows = []
-            for _, r in display_df.iterrows():
-                shift = r["Shift"]
-                person = r["Person"]
-                if shift == "CALL":
-                    rows.append(f"<tr><td><b>{shift}</b></td><td><b>{person}</b></td></tr>")
-                else:
-                    rows.append(f"<tr><td>{shift}</td><td>{person}</td></tr>")
+    if not day_schedule.empty:
+        st.subheader(f"Schedule for {chosen_date}")
 
-            html = f"""
-            <table style="width:50%; border-collapse:collapse; font-size:16px;">
-                {''.join(rows)}
-            </table>
-            """
+        # Build HTML table manually
+        rows = []
+        for _, r in day_schedule.iterrows():
+            shift = r["Shift"]
+            person = r["Person"]
+            if shift == "CALL":
+                rows.append(f"<tr><td><b>{shift}</b></td><td><b>{person}</b></td></tr>")
+            else:
+                rows.append(f"<tr><td>{shift}</td><td>{person}</td></tr>")
 
-            st.markdown(html, unsafe_allow_html=True)
-        else:
-            st.warning(f"No schedule found for {chosen_date}")
+        html = f"""
+        <table style="width:50%; border-collapse:collapse; font-size:16px;">
+            {''.join(rows)}
+        </table>
+        """
+        st.markdown(html, unsafe_allow_html=True)
     else:
-        st.error("No valid schedule data could be loaded.")
+        st.warning(f"No schedule found for {chosen_date}")
+else:
+    st.error("No valid schedule data could be loaded from Google Drive.")
