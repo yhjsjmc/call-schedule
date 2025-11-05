@@ -18,7 +18,7 @@ names_all = ["", "BOSS", "BUSH", "JUNG", "KASS", "LYMAR", "VITA"]
 names_off = ["", "JUNG", "HOLIDAY"]
 
 # -----------------------------
-# Generate weeks aligned to Monday
+# Generate Monday-aligned weeks
 # -----------------------------
 def generate_calendar_weeks(input_MMYY):
     start_date = datetime.strptime(input_MMYY, "%m%y")
@@ -26,59 +26,61 @@ def generate_calendar_weeks(input_MMYY):
     year = start_date.year
     num_days = calendar.monthrange(year, month)[1]
 
-    all_days = [datetime(year, month, day) for day in range(1, num_days + 1)]
-    weeks = []
-    week = []
+    first_day = datetime(year, month, 1)
+    last_day = datetime(year, month, num_days)
 
-    for day in all_days:
-        weekday_idx = day.weekday()  # Monday=0
-        if len(week) == 0 and weekday_idx != 0:
-            week = [None]*weekday_idx  # blank columns until first day
-        week.append(day)
-        if len(week) == 5:
-            weeks.append(week)
-            week = []
-    if week:
-        weeks.append(week)
+    # find the Monday of the first week
+    start_of_calendar = first_day - timedelta(days=first_day.weekday())
+    # find the Friday of the last week
+    end_of_calendar = last_day + timedelta(days=(4 - last_day.weekday()) % 7)
+
+    all_days = [start_of_calendar + timedelta(days=i) for i in range((end_of_calendar - start_of_calendar).days + 1)]
+
+    weeks = []
+    for i in range(0, len(all_days), 7):
+        workweek = [d if d.month == month and d.weekday() < 5 else None for d in all_days[i:i+7]]
+        # only keep Mon–Fri
+        week_days = [d for d in workweek if d is None or d.weekday() < 5]
+        if any(d for d in week_days):
+            weeks.append(week_days)
     return weeks
 
 weeks = generate_calendar_weeks(input_MMYY)
 
 # -----------------------------
-# Initialize schedule in session_state
+# Initialize schedule
 # -----------------------------
-if "schedule_df" not in st.session_state:
+if "schedule_df" not in st.session_state or st.session_state.get("loaded_month") != input_MMYY:
     data = []
     for w, week in enumerate(weeks):
         for shift in shifts:
             for i, date in enumerate(week):
                 data.append({
-                    "Week": w+1,
+                    "Week": w + 1,
                     "Date": date.strftime("%Y-%m-%d") if date else "",
                     "Day": date.strftime("%A") if date else "",
                     "Shift": shift,
                     "Person": ""
                 })
     st.session_state.schedule_df = pd.DataFrame(data)
+    st.session_state.loaded_month = input_MMYY
 
 df = st.session_state.schedule_df.copy()
 
 # -----------------------------
-# Display calendar table with selectboxes
+# Display table with dropdowns
 # -----------------------------
 st.subheader("Assign Shifts")
 
 for w, week in enumerate(weeks):
     st.markdown(f"### Week {w+1}")
-    # Header row
-    header_cols = st.columns(len(week)+1)
+    header_cols = st.columns(len(week) + 1)
     header_cols[0].markdown("**Shift / Day**")
     for i, date in enumerate(week):
-        header_cols[i+1].markdown(f"**{date.strftime('%a %d') if date else ''}**")
+        header_cols[i + 1].markdown(f"**{date.strftime('%a %d') if date else ''}**")
 
-    # Rows for each shift
     for shift in shifts:
-        row_cols = st.columns(len(week)+1)
+        row_cols = st.columns(len(week) + 1)
         row_cols[0].markdown(f"**{shift}**")
         for i, date in enumerate(week):
             if date is None:
@@ -87,24 +89,25 @@ for w, week in enumerate(weeks):
                 (df["Date"] == date.strftime("%Y-%m-%d")) &
                 (df["Shift"] == shift)
             ].index[0]
-            options = names_off if shift=="OFF" else names_all
-            selected = row_cols[i+1].selectbox(
-                "", options,
+            options = names_off if shift == "OFF" else names_all
+            selected = row_cols[i + 1].selectbox(
+                "",
+                options,
                 index=options.index(df.at[idx, "Person"]) if df.at[idx, "Person"] in options else 0,
-                key=f"{date}_{shift}"
+                key=f"{w}_{i}_{shift}"
             )
             df.at[idx, "Person"] = selected
 
 st.session_state.schedule_df = df.copy()
 
 # -----------------------------
-# Display final schedule
+# Display final dataframe
 # -----------------------------
 st.subheader("Schedule DataFrame")
 st.dataframe(df)
 
 # -----------------------------
-# Save to Excel
+# Save button
 # -----------------------------
 if st.button("Save Schedule to Excel"):
     os.makedirs("schedules", exist_ok=True)
