@@ -5,6 +5,7 @@ import calendar
 import os
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
+
 st.set_page_config(page_title="Generate Empty Schedule")
 st.title("🗓️ Generate Empty Monthly Schedule (AgGrid)")
 
