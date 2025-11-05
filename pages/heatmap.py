@@ -9,7 +9,7 @@ st.set_page_config(page_title="Heatmap")
 st.title("Heatmap based on FTE")
 
 # Input month/year
-st.subheader("Most recent until MMYY; Earliest version is 1225")
+st.subheader("Most recent until MMYY. Earliest version is 1225")
 
 input_MMYY = st.text_input("Enter month/year (MMYY)", value=datetime.today().strftime("%m%y"))
 
