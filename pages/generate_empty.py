@@ -1,98 +1,116 @@
 import streamlit as st
 import pandas as pd
-import calendar
 from datetime import datetime, timedelta
+import calendar
+import os
 
-st.set_page_config(layout="wide")
+st.set_page_config(page_title="Generate Empty Schedule")
+st.title("🗓️ Generate Empty Monthly Schedule")
 
-# --- Configuration ---
-people = ["", "Alice", "Bob", "Charlie", "Dana"]
-shifts = ["", "DAY", "CALL", "POST"]
-year = datetime.now().year
-month = datetime.now().month
+# -----------------------------
+# Inputs
+# -----------------------------
+input_MMYY = st.text_input("Enter month/year (MMYY)", value=datetime.today().strftime("%m%y"))
 
-# --- Calendar Setup ---
-first_day = datetime(year, month, 1)
-_, days_in_month = calendar.monthrange(year, month)
+weekdays = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
+shifts = ["CALL", "LATE", "EARLY", "4TH", "5TH", "POST", "VACATION", "OFF"]
+names_all = ["", "BOSS", "BUSH", "JUNG", "KASS", "LYMAR", "VITA"]
+names_off = ["", "JUNG", "HOLIDAY"]
 
-# Find Monday before or on the first day
-first_monday = first_day - timedelta(days=first_day.weekday())
-last_day = datetime(year, month, days_in_month)
-# Find Sunday after or on the last day
-last_sunday = last_day + timedelta(days=(6 - last_day.weekday()))
+# -----------------------------
+# Generate Monday-aligned weeks
+# -----------------------------
+def generate_calendar_weeks(input_MMYY):
+    start_date = datetime.strptime(input_MMYY, "%m%y")
+    month = start_date.month
+    year = start_date.year
+    num_days = calendar.monthrange(year, month)[1]
 
-# All days covering the displayed grid
-all_days = [first_monday + timedelta(days=i) for i in range((last_sunday - first_monday).days + 1)]
-weeks = [all_days[i:i+7] for i in range(0, len(all_days), 7)]
+    first_day = datetime(year, month, 1)
+    last_day = datetime(year, month, num_days)
 
-# --- Initialize Schedule State ---
-if "schedule" not in st.session_state:
-    st.session_state.schedule = {
-        date.strftime("%Y-%m-%d"): {"Person": "", "Shift": ""}
-        for date in all_days
-    }
+    # find the Monday of the first week
+    start_of_calendar = first_day - timedelta(days=first_day.weekday())
+    # find the Friday of the last week
+    end_of_calendar = last_day + timedelta(days=(4 - last_day.weekday()) % 7)
 
-# --- Helper Function ---
-def update_post_call(date_str):
-    """Automatically assign or clear POST following a CALL."""
-    date = datetime.strptime(date_str, "%Y-%m-%d")
-    # If Friday, skip to Monday
-    next_day = date + timedelta(days=3 if date.weekday() == 4 else 1)
-    next_day_str = next_day.strftime("%Y-%m-%d")
+    all_days = [start_of_calendar + timedelta(days=i) for i in range((end_of_calendar - start_of_calendar).days + 1)]
 
-    if next_day_str not in st.session_state.schedule:
-        return
+    weeks = []
+    for i in range(0, len(all_days), 7):
+        workweek = [d if d.month == month and d.weekday() < 5 else None for d in all_days[i:i+7]]
+        # only keep Mon–Fri
+        week_days = [d for d in workweek if d is None or d.weekday() < 5]
+        if any(d for d in week_days):
+            weeks.append(week_days)
+    return weeks
 
-    call_person = st.session_state.schedule[date_str]["Person"]
-    call_shift = st.session_state.schedule[date_str]["Shift"]
+weeks = generate_calendar_weeks(input_MMYY)
 
-    if call_shift == "CALL" and call_person:
-        st.session_state.schedule[next_day_str]["Person"] = call_person
-        st.session_state.schedule[next_day_str]["Shift"] = "POST"
-    elif call_shift != "CALL" or not call_person:
-        # Clear only if the next day is currently POST for that person
-        if st.session_state.schedule[next_day_str]["Shift"] == "POST":
-            st.session_state.schedule[next_day_str]["Person"] = ""
-            st.session_state.schedule[next_day_str]["Shift"] = ""
+# -----------------------------
+# Initialize schedule
+# -----------------------------
+if "schedule_df" not in st.session_state or st.session_state.get("loaded_month") != input_MMYY:
+    data = []
+    for w, week in enumerate(weeks):
+        for shift in shifts:
+            for i, date in enumerate(week):
+                data.append({
+                    "Week": w + 1,
+                    "Date": date.strftime("%Y-%m-%d") if date else "",
+                    "Day": date.strftime("%A") if date else "",
+                    "Shift": shift,
+                    "Person": ""
+                })
+    st.session_state.schedule_df = pd.DataFrame(data)
+    st.session_state.loaded_month = input_MMYY
 
-# --- Streamlit UI ---
-st.title(f"📅 {calendar.month_name[month]} {year} Scheduler")
+df = st.session_state.schedule_df.copy()
 
-for w, week in enumerate(weeks, start=1):
-    st.markdown(f"### Week {w}")
-    cols = st.columns(7, gap="large")  # wider spacing
+# -----------------------------
+# Display table with dropdowns
+# -----------------------------
+st.subheader("Assign Shifts")
+
+for w, week in enumerate(weeks):
+    st.markdown(f"### Week {w+1}")
+    header_cols = st.columns(len(week) + 1)
+    header_cols[0].markdown("**Shift / Day**")
     for i, date in enumerate(week):
-        date_str = date.strftime("%Y-%m-%d")
-        if date.month == month:
-            with cols[i]:
-                st.markdown(f"**{date.strftime('%a %d')}**")
-                prev_person = st.session_state.schedule[date_str]["Person"]
-                prev_shift = st.session_state.schedule[date_str]["Shift"]
+        header_cols[i + 1].markdown(f"**{date.strftime('%a %d') if date else ''}**")
 
-                person = st.selectbox(
-                    "Person",
-                    people,
-                    index=people.index(prev_person) if prev_person in people else 0,
-                    key=f"person_{date_str}",
-                    label_visibility="collapsed"
-                )
+    for shift in shifts:
+        row_cols = st.columns(len(week) + 1)
+        row_cols[0].markdown(f"**{shift}**")
+        for i, date in enumerate(week):
+            if date is None:
+                continue
+            idx = df[
+                (df["Date"] == date.strftime("%Y-%m-%d")) &
+                (df["Shift"] == shift)
+            ].index[0]
+            options = names_off if shift == "OFF" else names_all
+            selected = row_cols[i + 1].selectbox(
+                "",
+                options,
+                index=options.index(df.at[idx, "Person"]) if df.at[idx, "Person"] in options else 0,
+                key=f"{w}_{i}_{shift}"
+            )
+            df.at[idx, "Person"] = selected
 
-                shift = st.selectbox(
-                    "Shift",
-                    shifts,
-                    index=shifts.index(prev_shift) if prev_shift in shifts else 0,
-                    key=f"shift_{date_str}",
-                    label_visibility="collapsed"
-                )
+st.session_state.schedule_df = df.copy()
 
-                st.session_state.schedule[date_str]["Person"] = person
-                st.session_state.schedule[date_str]["Shift"] = shift
-
-                update_post_call(date_str)
-        else:
-            with cols[i]:
-                st.markdown("&nbsp;")  # blank for days outside the month
-
-# --- Display the Schedule Table ---
-df = pd.DataFrame.from_dict(st.session_state.schedule, orient="index")
+# -----------------------------
+# Display final dataframe
+# -----------------------------
+st.subheader("Schedule DataFrame")
 st.dataframe(df)
+
+# -----------------------------
+# Save button
+# -----------------------------
+if st.button("Save Schedule to Excel"):
+    os.makedirs("schedules", exist_ok=True)
+    filename = f"schedules/{input_MMYY}_schedule.xlsx"
+    df.to_excel(filename, index=False)
+    st.success(f"Saved schedule to {filename}")
