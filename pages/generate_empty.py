@@ -19,8 +19,8 @@ st.markdown(
     }
     /* Add some horizontal padding to each column */
     .css-1d391kg {  /* Streamlit column container */
-        padding-left: 6px;
-        padding-right: 6px;
+        padding-left: 15px;
+        padding-right: 15px;
     }
     </style>
     """,
