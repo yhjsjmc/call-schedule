@@ -14,7 +14,7 @@ st.markdown(
     """
     <style>
     div[data-baseweb="select"] > div {
-        min-width: 140px;
+        min-width: 120px;
     }
     </style>
     """,
