@@ -100,43 +100,10 @@ for w, week in enumerate(weeks):
 st.session_state.schedule_df = df.copy()
 
 # -----------------------------
-# Fill POST logic
-# -----------------------------
-def fill_post(df, weeks):
-    df_post = df.copy()
-    for w_idx, week in enumerate(weeks):
-        for i, day in enumerate(week):
-            if day is None:
-                continue
-            day_str = day.strftime("%Y-%m-%d")
-            call_person = df_post.loc[(df_post["Shift"]=="CALL") & (df_post["Date"]==day_str), "Person"].values[0]
-            if call_person and call_person != "":
-                # Determine next day
-                if i < 4:  # not Friday
-                    next_day = week[i+1]
-                    if next_day:
-                        next_day_str = next_day.strftime("%Y-%m-%d")
-                        df_post.loc[(df_post["Shift"]=="POST") & (df_post["Date"]==next_day_str), "Person"] = call_person
-                else:  # Friday → next Monday
-                    if w_idx + 1 < len(weeks):
-                        next_week = weeks[w_idx+1]
-                        next_monday = next_week[0]
-                        if next_monday:
-                            next_monday_str = next_monday.strftime("%Y-%m-%d")
-                            df_post.loc[(df_post["Shift"]=="POST") & (df_post["Date"]==next_monday_str), "Person"] = call_person
-    return df_post
-
-# Use a form to update POST safely
-with st.form("post_form"):
-    submitted = st.form_submit_button("Fill POST")
-    if submitted:
-        st.session_state.schedule_df = fill_post(st.session_state.schedule_df, weeks)
-
-# -----------------------------
 # Display final dataframe
 # -----------------------------
 st.subheader("Schedule DataFrame")
-st.dataframe(st.session_state.schedule_df, use_container_width=True)
+st.dataframe(df, use_container_width=True)
 
 # -----------------------------
 # Save button
@@ -144,11 +111,11 @@ st.dataframe(st.session_state.schedule_df, use_container_width=True)
 if st.button("Save Schedule to Excel"):
     os.makedirs("schedules", exist_ok=True)
     filename = f"schedules/{input_MMYY}_schedule.xlsx"
-    st.session_state.schedule_df.to_excel(filename, index=False)
+    df.to_excel(filename, index=False)
     st.success(f"Saved schedule to {filename}")
 
 # -----------------------------
-# CSS for wider dropdowns
+# Add minimal CSS for wider dropdowns
 # -----------------------------
 st.markdown("""
 <style>
