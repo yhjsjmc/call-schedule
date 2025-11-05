@@ -3,35 +3,18 @@ import pandas as pd
 from datetime import datetime, timedelta
 import calendar
 import os
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 st.set_page_config(page_title="Generate Empty Schedule")
-st.title("🗓️ Generate Empty Monthly Schedule")
-
-# -----------------------------
-# CSS for wider selectboxes
-# -----------------------------
-st.markdown(
-    """
-    <style>
-    /* Make selectboxes wider */
-    div[data-baseweb="select"] > div {
-        min-width: 140px;
-    }
-    /* Add some horizontal padding to each column */
-    .css-1d391kg {  /* Streamlit column container */
-        padding-left: 30px;
-        padding-right: 30px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
+st.title("🗓️ Generate Empty Monthly Schedule (AgGrid)")
 
 # -----------------------------
 # Inputs
 # -----------------------------
-input_MMYY = st.text_input("Enter month/year (MMYY)", value=datetime.today().strftime("%m%y"))
+input_MMYY = st.text_input(
+    "Enter month/year (MMYY)",
+    value=datetime.today().strftime("%m%y")
+)
 
 weekdays = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
 shifts = ["CALL", "LATE", "EARLY", "4TH", "5TH", "POST", "VACATION", "OFF"]
@@ -39,94 +22,71 @@ names_all = ["", "BOSS", "BUSH", "JUNG", "KASS", "LYMAR", "VITA"]
 names_off = ["", "JUNG", "HOLIDAY"]
 
 # -----------------------------
-# Generate Monday-aligned weeks
+# Generate month calendar as DataFrame
 # -----------------------------
-def generate_calendar_weeks(input_MMYY):
+def generate_schedule_df(input_MMYY):
     start_date = datetime.strptime(input_MMYY, "%m%y")
     month = start_date.month
     year = start_date.year
     num_days = calendar.monthrange(year, month)[1]
 
-    first_day = datetime(year, month, 1)
-    last_day = datetime(year, month, num_days)
+    # Only weekdays
+    all_days = [datetime(year, month, d) for d in range(1, num_days + 1)
+                if datetime(year, month, d).weekday() < 5]
 
-    # find the Monday of the first week
-    start_of_calendar = first_day - timedelta(days=first_day.weekday())
-    # find the Friday of the last week
-    end_of_calendar = last_day + timedelta(days=(4 - last_day.weekday()) % 7)
-
-    all_days = [start_of_calendar + timedelta(days=i) for i in range((end_of_calendar - start_of_calendar).days + 1)]
-
-    weeks = []
-    for i in range(0, len(all_days), 7):
-        workweek = [d if d.month == month and d.weekday() < 5 else None for d in all_days[i:i+7]]
-        # only keep Mon–Fri
-        week_days = [d for d in workweek if d is None or d.weekday() < 5]
-        if any(d for d in week_days):
-            weeks.append(week_days)
-    return weeks
-
-weeks = generate_calendar_weeks(input_MMYY)
-
-# -----------------------------
-# Initialize schedule
-# -----------------------------
-if "schedule_df" not in st.session_state or st.session_state.get("loaded_month") != input_MMYY:
+    # Create a DataFrame: shifts as rows, weekdays as columns
     data = []
-    for w, week in enumerate(weeks):
-        for shift in shifts:
-            for i, date in enumerate(week):
-                data.append({
-                    "Week": w + 1,
-                    "Date": date.strftime("%Y-%m-%d") if date else "",
-                    "Day": date.strftime("%A") if date else "",
-                    "Shift": shift,
-                    "Person": ""
-                })
-    st.session_state.schedule_df = pd.DataFrame(data)
+    for shift in shifts:
+        row = {"Shift": shift}
+        for day in all_days:
+            col_name = day.strftime("%a %d")
+            row[col_name] = ""
+        data.append(row)
+
+    df = pd.DataFrame(data)
+    return df
+
+# Initialize schedule
+if "schedule_df" not in st.session_state or st.session_state.get("loaded_month") != input_MMYY:
+    st.session_state.schedule_df = generate_schedule_df(input_MMYY)
     st.session_state.loaded_month = input_MMYY
 
 df = st.session_state.schedule_df.copy()
 
 # -----------------------------
-# Display table with dropdowns
+# Configure AgGrid
 # -----------------------------
-st.subheader("Assign Shifts")
+gb = GridOptionsBuilder.from_dataframe(df)
+gb.configure_default_column(editable=True, resizable=True)
 
-for w, week in enumerate(weeks):
-    st.markdown(f"### Week {w+1}")
-    col_widths = [2] + [3]*len(week)  # relative widths
-    header_cols = st.columns(col_widths)
-    header_cols[0].markdown("**Shift / Day**")
-    for i, date in enumerate(week):
-        header_cols[i + 1].markdown(f"**{date.strftime('%a %d') if date else ''}**")
+# Set dropdown options per column
+for col in df.columns[1:]:
+    gb.configure_column(
+        col,
+        cellEditor='agSelectCellEditor',
+        cellEditorParams={'values': names_off if col.startswith("OFF") else names_all}
+    )
 
-    for shift in shifts:
-        row_cols = st.columns(col_widths)
-        row_cols[0].markdown(f"**{shift}**")
-        for i, date in enumerate(week):
-            if date is None:
-                continue
-            idx = df[
-                (df["Date"] == date.strftime("%Y-%m-%d")) &
-                (df["Shift"] == shift)
-            ].index[0]
-            options = names_off if shift == "OFF" else names_all
-            selected = row_cols[i + 1].selectbox(
-                "",
-                options,
-                index=options.index(df.at[idx, "Person"]) if df.at[idx, "Person"] in options else 0,
-                key=f"{w}_{i}_{shift}"
-            )
-            df.at[idx, "Person"] = selected
+grid_options = gb.build()
 
-st.session_state.schedule_df = df.copy()
+st.subheader("Assign Shifts (Editable Table)")
+grid_response = AgGrid(
+    df,
+    gridOptions=grid_options,
+    height=400,
+    width='100%',
+    fit_columns_on_grid_load=True,
+    update_mode='MODEL_CHANGED'
+)
+
+# Save back to session_state
+st.session_state.schedule_df = pd.DataFrame(grid_response['data'])
 
 # -----------------------------
 # Display final dataframe
 # -----------------------------
 st.subheader("Schedule DataFrame")
-st.dataframe(df, use_container_width=True)
+st.dataframe(st.session_state.schedule_df, use_container_width=True)
 
 # -----------------------------
 # Save button
@@ -134,5 +94,5 @@ st.dataframe(df, use_container_width=True)
 if st.button("Save Schedule to Excel"):
     os.makedirs("schedules", exist_ok=True)
     filename = f"schedules/{input_MMYY}_schedule.xlsx"
-    df.to_excel(filename, index=False)
+    st.session_state.schedule_df.to_excel(filename, index=False)
     st.success(f"Saved schedule to {filename}")
