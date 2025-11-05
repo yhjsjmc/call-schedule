@@ -13,13 +13,20 @@ st.title("🗓️ Generate Empty Monthly Schedule")
 st.markdown(
     """
     <style>
+    /* Make selectboxes wider */
     div[data-baseweb="select"] > div {
-        min-width: 120px;
+        min-width: 140px;
+    }
+    /* Add some horizontal padding to each column */
+    .css-1d391kg {  /* Streamlit column container */
+        padding-left: 6px;
+        padding-right: 6px;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
+
 
 # -----------------------------
 # Inputs
