@@ -5,7 +5,7 @@ import calendar
 import os
 
 st.set_page_config(page_title="Generate Empty Schedule")
-st.title("🗓️ Generate Empty Monthly Schedule with CALL → POST Rule")
+st.title("🗓️ Generate Empty Monthly Schedule")
 
 # -----------------------------
 # Inputs
@@ -33,7 +33,7 @@ def generate_calendar_weeks(input_MMYY):
     for day in all_days:
         weekday_idx = day.weekday()  # Monday=0
         if len(week) == 0 and weekday_idx != 0:
-            week = [None]*weekday_idx
+            week = [None]*weekday_idx  # blank columns until first day
         week.append(day)
         if len(week) == 5:
             weeks.append(week)
@@ -66,15 +66,17 @@ df = st.session_state.schedule_df.copy()
 # -----------------------------
 # Display calendar table with selectboxes
 # -----------------------------
-st.subheader("Assign Shifts (CALL → POST updates automatically)")
+st.subheader("Assign Shifts")
 
 for w, week in enumerate(weeks):
     st.markdown(f"### Week {w+1}")
+    # Header row
     header_cols = st.columns(len(week)+1)
     header_cols[0].markdown("**Shift / Day**")
     for i, date in enumerate(week):
         header_cols[i+1].markdown(f"**{date.strftime('%a %d') if date else ''}**")
 
+    # Rows for each shift
     for shift in shifts:
         row_cols = st.columns(len(week)+1)
         row_cols[0].markdown(f"**{shift}**")
@@ -87,30 +89,12 @@ for w, week in enumerate(weeks):
             ].index[0]
             options = names_off if shift=="OFF" else names_all
             selected = row_cols[i+1].selectbox(
-                "", options, index=options.index(df.at[idx, "Person"]) if df.at[idx, "Person"] in options else 0,
+                "", options,
+                index=options.index(df.at[idx, "Person"]) if df.at[idx, "Person"] in options else 0,
                 key=f"{date}_{shift}"
             )
             df.at[idx, "Person"] = selected
 
-# -----------------------------
-# Apply CALL → POST rule
-# -----------------------------
-call_rows = df[df["Shift"]=="CALL"]
-for i, row in call_rows.iterrows():
-    person = row["Person"]
-    if person != "":
-        # Find next weekday POST
-        current_date = datetime.strptime(row["Date"], "%Y-%m-%d")
-        next_day = current_date + timedelta(days=1)
-        while next_day.strftime("%A").upper() not in weekdays:
-            next_day += timedelta(days=1)
-        post_idx = df[(df["Date"] == next_day.strftime("%Y-%m-%d")) & (df["Shift"]=="POST")].index
-        if len(post_idx) > 0:
-            df.at[post_idx[0], "Person"] = person
-
-# -----------------------------
-# Update session_state
-# -----------------------------
 st.session_state.schedule_df = df.copy()
 
 # -----------------------------
