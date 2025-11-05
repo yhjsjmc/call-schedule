@@ -104,13 +104,11 @@ st.session_state.schedule_df = df.copy()
 # -----------------------------
 def fill_post(df, weeks):
     df_post = df.copy()
-    date_shift_map = df_post.pivot(index="Shift", columns="Date", values="Person")
     for w_idx, week in enumerate(weeks):
         for i, day in enumerate(week):
             if day is None:
                 continue
             day_str = day.strftime("%Y-%m-%d")
-            # Find CALL person
             call_person = df_post.loc[(df_post["Shift"]=="CALL") & (df_post["Date"]==day_str), "Person"].values[0]
             if call_person and call_person != "":
                 # Determine next day
@@ -128,9 +126,11 @@ def fill_post(df, weeks):
                             df_post.loc[(df_post["Shift"]=="POST") & (df_post["Date"]==next_monday_str), "Person"] = call_person
     return df_post
 
-if st.button("Fill POST"):
-    st.session_state.schedule_df = fill_post(st.session_state.schedule_df, weeks)
-    st.experimental_rerun()
+# Use a form to update POST safely
+with st.form("post_form"):
+    submitted = st.form_submit_button("Fill POST")
+    if submitted:
+        st.session_state.schedule_df = fill_post(st.session_state.schedule_df, weeks)
 
 # -----------------------------
 # Display final dataframe
