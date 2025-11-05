@@ -74,7 +74,7 @@ st.subheader("Assign Shifts")
 
 for w, week in enumerate(weeks):
     st.markdown(f"### Week {w+1}")
-    col_widths = [6] + [4]*len(week)  # first column narrower, date columns wider
+    col_widths = [6] + [6]*len(week)  # first column narrower, date columns wider
     header_cols = st.columns(col_widths)
     header_cols[0].markdown("**Shift / Day**")
     for i, date in enumerate(week):
