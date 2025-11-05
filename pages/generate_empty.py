@@ -7,7 +7,8 @@ st.set_page_config(layout="wide")
 st.title("📅 Weekday Call Scheduler")
 
 people = ["", "BOSS", "BUSH", "JUNG", "KASS", "LYMAR", "VITA"]
-shifts = ["", "CALL", "LATE", "EARLY", "4TH", "5TH", "POST", "VACATION", "OFF"]
+shifts = ["CALL", "LATE", "EARLY", "4TH", "5TH", "POST", "VACATION", "OFF"]
+weekdays = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
 
 # --- Inputs ---
 col1, col2 = st.columns(2)
@@ -18,66 +19,79 @@ year = col2.number_input("Year", 2000, 2100, datetime.now().year)
 first_day = datetime(year, month, 1)
 _, days_in_month = calendar.monthrange(year, month)
 last_day = datetime(year, month, days_in_month)
-first_monday = first_day - timedelta(days=(first_day.weekday() % 7))
-# Only weekdays
-all_days = [first_monday + timedelta(days=i) for i in range((last_day - first_monday).days + 1)]
-all_days = [d for d in all_days if d.weekday() < 5]  # Mon–Fri only
 
+# Get all weekdays for this month only
+all_dates = [datetime(year, month, d) for d in range(1, days_in_month + 1)]
+weekday_dates = [d for d in all_dates if d.weekday() < 5]  # 0=Mon, 4=Fri
+
+# Split into weeks (Mon–Fri chunks)
 weeks = []
 week = []
-for d in all_days:
-    if d.weekday() == 0 and week:
+for date in weekday_dates:
+    if date.weekday() == 0 and week:  # New week when Monday appears
         weeks.append(week)
         week = []
-    week.append(d)
+    week.append(date)
 if week:
     weeks.append(week)
 
-# --- Initialize schedule ---
+# --- Initialize session state ---
 if "schedule" not in st.session_state:
     st.session_state.schedule = {
-        date.strftime("%Y-%m-%d"): {"Person": "", "Shift": ""}
-        for date in all_days
+        date.strftime("%Y-%m-%d"): {shift: "" for shift in shifts}
+        for date in weekday_dates
     }
 
-def update_post_call(date_str):
-    date = datetime.strptime(date_str, "%Y-%m-%d")
-    next_day = date + timedelta(days=1)
-    if date.weekday() == 4:  # Friday -> next Monday
-        next_day += timedelta(days=2)
-    next_key = next_day.strftime("%Y-%m-%d")
-    if next_key not in st.session_state.schedule:
-        return
+def update_post_call():
+    """If a day is CALL, next weekday is POST for the same person."""
+    for date_str, shift_map in st.session_state.schedule.items():
+        date = datetime.strptime(date_str, "%Y-%m-%d")
+        next_day = date + timedelta(days=1)
+        # Skip to Monday if next day is weekend
+        while next_day.weekday() > 4:
+            next_day += timedelta(days=1)
+        next_str = next_day.strftime("%Y-%m-%d")
+        if next_str not in st.session_state.schedule:
+            continue
+        if shift_map["CALL"]:
+            st.session_state.schedule[next_str]["POST"] = shift_map["CALL"]
+        else:
+            # Clear POST if no CALL assigned
+            if st.session_state.schedule[next_str]["POST"]:
+                st.session_state.schedule[next_str]["POST"] = ""
 
-    current = st.session_state.schedule[date_str]
-    next_entry = st.session_state.schedule[next_key]
-    if current["Shift"] == "CALL" and current["Person"]:
-        next_entry["Person"] = current["Person"]
-        next_entry["Shift"] = "POST"
-    else:
-        if next_entry["Shift"] == "POST":
-            next_entry["Person"] = ""
-            next_entry["Shift"] = ""
+# --- Display schedule ---
+for w_idx, week in enumerate(weeks, start=1):
+    st.markdown(f"### Week {w_idx}")
+    cols = st.columns([2, 2, 2, 2, 2])  # widen columns
+    week_dates = {wd.strftime("%A").upper(): wd for wd in week}
 
-# --- Display weeks ---
-for idx, week in enumerate(weeks, start=1):
-    st.markdown(f"#### Week {idx}")
-    cols = st.columns(5)
-    for i, date in enumerate(week):
-        dkey = date.strftime("%Y-%m-%d")
-        label = date.strftime("%a %d")
-        with cols[i]:
-            st.markdown(f"**{label}**")
-            s = st.session_state.schedule[dkey]
-            p_idx = people.index(s["Person"]) if s["Person"] in people else 0
-            sh_idx = shifts.index(s["Shift"]) if s["Shift"] in shifts else 0
-            person = st.selectbox("Person", people, index=p_idx, key=f"person_{dkey}", label_visibility="collapsed")
-            shift = st.selectbox("Shift", shifts, index=sh_idx, key=f"shift_{dkey}", label_visibility="collapsed")
-            st.session_state.schedule[dkey]["Person"] = person
-            st.session_state.schedule[dkey]["Shift"] = shift
-            update_post_call(dkey)
+    for shift in shifts:
+        st.markdown(f"**{shift}**")
+        row_cols = st.columns([2, 2, 2, 2, 2])
+        for i, wd in enumerate(weekdays):
+            if wd in week_dates:
+                date = week_dates[wd]
+                dkey = date.strftime("%Y-%m-%d")
+                val = st.session_state.schedule[dkey][shift]
+                idx = people.index(val) if val in people else 0
+                chosen = row_cols[i].selectbox(
+                    wd[:3],
+                    people,
+                    index=idx,
+                    key=f"{dkey}_{shift}",
+                    label_visibility="collapsed",
+                )
+                st.session_state.schedule[dkey][shift] = chosen
+            else:
+                row_cols[i].markdown("")  # blank cell for missing day
+    update_post_call()
 
-# --- Output table ---
-df = pd.DataFrame.from_dict(st.session_state.schedule, orient="index")
-df.index.name = "Date"
-st.dataframe(df, use_container_width=True)
+# --- Output dataframe ---
+st.markdown("### Summary Table")
+flat = []
+for date_str, shifts_map in st.session_state.schedule.items():
+    for s, p in shifts_map.items():
+        if p:
+            flat.append({"Date": date_str, "Shift": s, "Person": p})
+st.dataframe(pd.DataFrame(flat), use_container_width=True)
