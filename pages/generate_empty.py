@@ -3,11 +3,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 import calendar
 import os
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
-
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 st.set_page_config(page_title="Generate Empty Schedule")
-st.title("🗓️ Generate Empty Monthly Schedule (AgGrid)")
+st.title("🗓️ Generate Empty Monthly Schedule (Calendar Style)")
 
 # -----------------------------
 # Inputs
@@ -23,33 +22,50 @@ names_all = ["", "BOSS", "BUSH", "JUNG", "KASS", "LYMAR", "VITA"]
 names_off = ["", "JUNG", "HOLIDAY"]
 
 # -----------------------------
-# Generate month calendar as DataFrame
+# Generate Monday-aligned weeks
 # -----------------------------
-def generate_schedule_df(input_MMYY):
+def generate_calendar_weeks(input_MMYY):
     start_date = datetime.strptime(input_MMYY, "%m%y")
     month = start_date.month
     year = start_date.year
     num_days = calendar.monthrange(year, month)[1]
 
-    # Only weekdays
-    all_days = [datetime(year, month, d) for d in range(1, num_days + 1)
-                if datetime(year, month, d).weekday() < 5]
+    first_day = datetime(year, month, 1)
+    last_day = datetime(year, month, num_days)
 
-    # Create a DataFrame: shifts as rows, weekdays as columns
+    # Monday of first week
+    start_of_calendar = first_day - timedelta(days=first_day.weekday())
+    # Friday of last week
+    end_of_calendar = last_day + timedelta(days=(4 - last_day.weekday()) % 7)
+
+    all_days = [start_of_calendar + timedelta(days=i) for i in range((end_of_calendar - start_of_calendar).days + 1)]
+
+    weeks = []
+    for i in range(0, len(all_days), 7):
+        week = [d if d.month == month and d.weekday() < 5 else None for d in all_days[i:i+7]]
+        if any(d for d in week):
+            weeks.append(week[:5])  # keep only Mon–Fri
+    return weeks
+
+weeks = generate_calendar_weeks(input_MMYY)
+
+# -----------------------------
+# Initialize schedule DataFrame
+# -----------------------------
+def create_calendar_schedule_df(weeks):
     data = []
-    for shift in shifts:
-        row = {"Shift": shift}
-        for day in all_days:
-            col_name = day.strftime("%a %d")
-            row[col_name] = ""
-        data.append(row)
-
+    for w_idx, week in enumerate(weeks):
+        for shift in shifts:
+            row = {"Week": w_idx + 1, "Shift": shift}
+            for day in week:
+                col_name = day.strftime("%a %d") if day else ""
+                row[col_name] = ""
+            data.append(row)
     df = pd.DataFrame(data)
     return df
 
-# Initialize schedule
 if "schedule_df" not in st.session_state or st.session_state.get("loaded_month") != input_MMYY:
-    st.session_state.schedule_df = generate_schedule_df(input_MMYY)
+    st.session_state.schedule_df = create_calendar_schedule_df(weeks)
     st.session_state.loaded_month = input_MMYY
 
 df = st.session_state.schedule_df.copy()
@@ -60,18 +76,21 @@ df = st.session_state.schedule_df.copy()
 gb = GridOptionsBuilder.from_dataframe(df)
 gb.configure_default_column(editable=True, resizable=True)
 
-# Set dropdown options per column
-for col in df.columns[1:]:
+# Dropdown options per cell
+for col in df.columns[2:]:  # skip Week and Shift columns
     gb.configure_column(
         col,
         cellEditor='agSelectCellEditor',
-        cellEditorParams={'values': names_off if col.startswith("OFF") else names_all}
+        cellEditorParams={'values': names_off}  # will adjust OFF later
     )
+
+# Optional: you can dynamically choose OFF per row if needed
+# e.g., detect shift column and assign names_off
 
 grid_options = gb.build()
 
-st.subheader("Assign Shifts (Editable Table)")
-grid_response = AgGrid(
+st.subheader("Assign Shifts (Editable Calendar)")
+AgGrid(
     df,
     gridOptions=grid_options,
     height=400,
@@ -80,8 +99,7 @@ grid_response = AgGrid(
     update_mode='MODEL_CHANGED'
 )
 
-# Save back to session_state
-st.session_state.schedule_df = pd.DataFrame(grid_response['data'])
+st.session_state.schedule_df = df.copy()
 
 # -----------------------------
 # Display final dataframe
