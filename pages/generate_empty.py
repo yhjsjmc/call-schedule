@@ -8,6 +8,20 @@ st.set_page_config(page_title="Generate Empty Schedule")
 st.title("🗓️ Generate Empty Monthly Schedule")
 
 # -----------------------------
+# CSS for wider selectboxes
+# -----------------------------
+st.markdown(
+    """
+    <style>
+    div[data-baseweb="select"] > div {
+        min-width: 140px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# -----------------------------
 # Inputs
 # -----------------------------
 input_MMYY = st.text_input("Enter month/year (MMYY)", value=datetime.today().strftime("%m%y"))
@@ -74,7 +88,7 @@ st.subheader("Assign Shifts")
 
 for w, week in enumerate(weeks):
     st.markdown(f"### Week {w+1}")
-    col_widths = [6] + [6]*len(week)  # first column narrower, date columns wider
+    col_widths = [2] + [3]*len(week)  # relative widths
     header_cols = st.columns(col_widths)
     header_cols[0].markdown("**Shift / Day**")
     for i, date in enumerate(week):
