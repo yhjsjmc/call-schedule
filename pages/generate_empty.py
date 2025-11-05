@@ -4,84 +4,134 @@ from datetime import datetime, timedelta
 import calendar
 import os
 
-st.title("🗓️ Generate Empty Monthly Schedule")
+st.set_page_config(page_title="Generate Empty Schedule")
+st.title("🗓️ Generate Empty Monthly Schedule with CALL → POST Rule")
 
 # -----------------------------
-# Input month/year
+# Inputs
 # -----------------------------
 input_MMYY = st.text_input("Enter month/year (MMYY)", value=datetime.today().strftime("%m%y"))
 
-# -----------------------------
 # Constants
-# -----------------------------
 weekdays = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
 shifts = ["CALL", "LATE", "EARLY", "4TH", "5TH", "POST", "VACATION", "OFF"]
 names_all = ["", "BOSS", "BUSH", "JUNG", "KASS", "LYMAR", "VITA"]
 names_off = ["", "JUNG", "HOLIDAY"]
 
 # -----------------------------
-# Generate calendar-like schedule
+# Generate weeks aligned to Monday
 # -----------------------------
-def create_month_calendar(input_MMYY):
+def generate_calendar_weeks(input_MMYY):
     start_date = datetime.strptime(input_MMYY, "%m%y")
     month = start_date.month
     year = start_date.year
-
     num_days = calendar.monthrange(year, month)[1]
 
-    # Build weeks (Monday to Friday only)
+    all_days = [datetime(year, month, day) for day in range(1, num_days + 1)]
     weeks = []
     week = []
-    for day in range(1, num_days + 1):
-        date = datetime(year, month, day)
-        if date.strftime("%A").upper() in weekdays:
-            week.append(date)
-        if len(week) == 5:  # full week
+
+    # Determine weekday index (Mon=0)
+    for day in all_days:
+        weekday_idx = day.weekday()  # Monday=0
+        if len(week) == 0 and weekday_idx != 0:
+            # prepend empty columns until the first Monday
+            week = [None]*weekday_idx
+        week.append(day)
+        if len(week) == 5:  # full Mon-Fri week
             weeks.append(week)
             week = []
     if week:
-        weeks.append(week)  # last partial week
-
+        weeks.append(week)
     return weeks
 
-weeks = create_month_calendar(input_MMYY)
+weeks = generate_calendar_weeks(input_MMYY)
 
 # -----------------------------
-# Interactive calendar table
+# Initialize schedule in session_state
 # -----------------------------
-st.subheader("Assign Shifts (Dropdowns)")
+if "schedule_data" not in st.session_state:
+    st.session_state.schedule_data = []
 
-schedule_data = []
+    for w, week in enumerate(weeks):
+        for shift in shifts:
+            for i, date in enumerate(week):
+                if date is not None:
+                    st.session_state.schedule_data.append({
+                        "Week": w+1,
+                        "Date": date.strftime("%Y-%m-%d"),
+                        "Day": date.strftime("%A"),
+                        "Shift": shift,
+                        "Person": ""
+                    })
+
+# Convert to DataFrame
+df_schedule = pd.DataFrame(st.session_state.schedule_data)
+
+# Helper: find next weekday row for POST rule
+def find_next_weekday_index(current_idx, df):
+    current_row = df.iloc[current_idx]
+    current_date = datetime.strptime(current_row["Date"], "%Y-%m-%d")
+    next_day = current_date + timedelta(days=1)
+    # Skip weekends
+    while next_day.strftime("%A").upper() not in weekdays:
+        next_day += timedelta(days=1)
+    # Find index in df for POST of that next day
+    next_idx = df[
+        (df["Date"] == next_day.strftime("%Y-%m-%d")) &
+        (df["Shift"] == "POST")
+    ].index
+    if len(next_idx) == 0:
+        return None
+    return next_idx[0]
+
+# -----------------------------
+# Display calendar-like table
+# -----------------------------
+st.subheader("Assign Shifts (CALL → POST updates automatically)")
 
 for w, week in enumerate(weeks):
     st.markdown(f"### Week {w+1}")
-    
     # Header row
-    header_cols = st.columns(len(week) + 1)
+    header_cols = st.columns(len(week)+1)
     header_cols[0].markdown("**Shift / Day**")
     for i, date in enumerate(week):
-        header_cols[i+1].markdown(f"**{date.strftime('%a %d')}**")
-    
+        header_cols[i+1].markdown(f"**{date.strftime('%a %d') if date else ''}**")
+
     # Rows for each shift
     for shift in shifts:
-        row_cols = st.columns(len(week) + 1)
+        row_cols = st.columns(len(week)+1)
         row_cols[0].markdown(f"**{shift}**")
         for i, date in enumerate(week):
+            if date is None:
+                continue
+            idx = df_schedule[
+                (df_schedule["Date"] == date.strftime("%Y-%m-%d")) &
+                (df_schedule["Shift"] == shift)
+            ].index[0]
+
             options = names_off if shift == "OFF" else names_all
+
             selected = row_cols[i+1].selectbox(
-                "", options, key=f"week{w}_day{date.day}_{shift}"
+                "", options, key=f"{date}_{shift}",
+                index=options.index(df_schedule.at[idx, "Person"]) if df_schedule.at[idx, "Person"] in options else 0
             )
-            schedule_data.append({
-                "Week": w+1,
-                "Date": date.strftime("%Y-%m-%d"),
-                "Day": date.strftime("%A"),
-                "Shift": shift,
-                "Person": selected
-            })
 
-# Convert to DataFrame for display
-df_schedule = pd.DataFrame(schedule_data)
+            # Update session_state
+            df_schedule.at[idx, "Person"] = selected
+            st.session_state.schedule_data[idx]["Person"] = selected
 
+            # ---- CALL → POST logic ----
+            if shift == "CALL":
+                next_idx = find_next_weekday_index(idx, df_schedule)
+                if next_idx is not None:
+                    # Update POST next day
+                    df_schedule.at[next_idx, "Person"] = selected
+                    st.session_state.schedule_data[next_idx]["Person"] = selected
+
+# -----------------------------
+# Display schedule
+# -----------------------------
 st.subheader("Schedule DataFrame")
 st.dataframe(df_schedule)
 
