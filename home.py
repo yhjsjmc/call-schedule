@@ -8,18 +8,78 @@ from datetime import datetime, timedelta
 # Tidy conversion function
 # -------------------------------
 def convert_schedule_to_tidy(df, base_year=None, base_month=None):
-    # ... your existing function ...
-    pass
+    base_date = datetime(base_year, base_month, 1)
+    tidy_data = []
+    holiday_dates = set()
+    days = df.columns[1:]  # skip first column (shift names)
+
+    for i in range(1, len(df), 9):  # every 9 rows = 1 week
+        week = df.iloc[i:i+9].reset_index(drop=True)
+        if week.shape[0] < 2:
+            continue
+
+        date_row = week.iloc[0, 1:].values
+        if all(pd.isna(x) for x in date_row):
+            continue
+
+        for row in range(1, week.shape[0]):
+            shift_type = str(week.iloc[row, 0]).strip().upper()
+            if pd.isna(shift_type):
+                continue
+
+            for col_idx, day in enumerate(days):
+                date_val = date_row[col_idx]
+                cell_val = week.iloc[row, col_idx + 1]
+
+                if pd.notna(cell_val) and pd.notna(date_val):
+                    try:
+                        day_num = int(date_val)
+                        date_obj = base_date + timedelta(days=day_num - 1)
+                    except:
+                        continue
+
+                    people = [p.strip().upper() for p in str(cell_val).split(',') if p.strip()]
+
+                    if shift_type == "OFF" and any(p.lower() == "holiday" for p in people):
+                        holiday_dates.add(date_obj.date())
+                        continue
+
+                    for person in people:
+                        tidy_data.append({
+                            'Date': date_obj.date(),
+                            'Day': day,
+                            'Shift': shift_type,
+                            'Person': person,
+                            'IsHoliday': date_obj.date() in holiday_dates
+                        })
+
+    tidy_df = pd.DataFrame(tidy_data)
+    if not tidy_df.empty:
+        tidy_df["Date"] = pd.to_datetime(tidy_df["Date"]).dt.date
+    return tidy_df
 
 # -------------------------------
-# Load all schedules
+# Load all schedules in schedules/
 # -------------------------------
 def load_all_schedules():
-    # ... your existing function ...
-    pass
+    tidy_list = []
+    files = glob.glob("schedules/*.xlsx")
+    for filepath in sorted(files):
+        try:
+            fname = os.path.splitext(os.path.basename(filepath))[0]  # e.g. 2025-07
+            year, month = map(int, fname.split("-"))
+            df_raw = pd.read_excel(filepath, header=None)
+            tidy = convert_schedule_to_tidy(df_raw, base_year=year, base_month=month)
+            if not tidy.empty:
+                tidy_list.append(tidy)
+        except Exception as e:
+            st.error(f"Error reading {filepath}: {e}")
+    if tidy_list:
+        return pd.concat(tidy_list, ignore_index=True)
+    return pd.DataFrame()
 
 # -------------------------------
-# Streamlit Page
+# Streamlit App
 # -------------------------------
 st.title("📅 Call Schedule Viewer")
 
@@ -28,10 +88,12 @@ full_schedule = load_all_schedules()
 if not full_schedule.empty:
     today = datetime.today().date()
     chosen_date = st.date_input("Pick a date", value=today)
+
     day_schedule = full_schedule[full_schedule["Date"] == chosen_date]
 
     if not day_schedule.empty:
         st.subheader(f"Schedule for {chosen_date}")
+
         rows = []
         for _, r in day_schedule.iterrows():
             shift = r["Shift"]
@@ -40,7 +102,12 @@ if not full_schedule.empty:
                 rows.append(f"<tr><td><b>{shift}</b></td><td><b>{person}</b></td></tr>")
             else:
                 rows.append(f"<tr><td>{shift}</td><td>{person}</td></tr>")
-        html = f"<table style='width:50%; border-collapse:collapse; font-size:16px;'>{''.join(rows)}</table>"
+
+        html = f"""
+        <table style="width:50%; border-collapse:collapse; font-size:16px;">
+            {''.join(rows)}
+        </table>
+        """
         st.markdown(html, unsafe_allow_html=True)
     else:
         st.warning(f"No schedule found for {chosen_date}")
