@@ -74,13 +74,14 @@ st.subheader("Assign Shifts")
 
 for w, week in enumerate(weeks):
     st.markdown(f"### Week {w+1}")
-    header_cols = st.columns(len(week) + 1)
+    col_widths = [2] + [3]*len(week)  # first column narrower, date columns wider
+    header_cols = st.columns(col_widths)
     header_cols[0].markdown("**Shift / Day**")
     for i, date in enumerate(week):
         header_cols[i + 1].markdown(f"**{date.strftime('%a %d') if date else ''}**")
 
     for shift in shifts:
-        row_cols = st.columns(len(week) + 1)
+        row_cols = st.columns(col_widths)
         row_cols[0].markdown(f"**{shift}**")
         for i, date in enumerate(week):
             if date is None:
@@ -104,7 +105,7 @@ st.session_state.schedule_df = df.copy()
 # Display final dataframe
 # -----------------------------
 st.subheader("Schedule DataFrame")
-st.dataframe(df)
+st.dataframe(df, use_container_width=True)
 
 # -----------------------------
 # Save button
