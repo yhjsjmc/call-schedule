@@ -66,7 +66,7 @@ def load_all_schedules():
     files = glob.glob("schedules/*.xlsx")
     for filepath in sorted(files):
         try:
-            fname = os.path.splitext(os.path.basename(filepath))[0]  # e.g. 0126_schedule
+            fname = os.path.splitext(os.path.basename(filepath))[0]  # e.g. 2025-07
             # Assuming MMYY format in the filename (e.g., 0126_schedule for January 2026)
             month_str = fname[:2]  # First two characters for the month
             year_str = "20" + fname[2:4]  # Next two characters for the year, prefix with '20'
