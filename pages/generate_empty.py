@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import calendar
-import os
 
 st.set_page_config(page_title="Generate Empty Schedule")
 st.title("🗓️ Generate Empty Monthly Schedule")
@@ -102,17 +101,21 @@ st.session_state.schedule_df = df.copy()
 # -----------------------------
 # Generate Excel file
 # -----------------------------
-excel_bytes = df.to_excel(index=False, engine="openpyxl")
+try:
+    excel_bytes = df.to_excel(index=False, engine="openpyxl")
+except Exception as e:
+    st.error(f"Error generating Excel file: {e}")
 
 # -----------------------------
 # Download button
 # -----------------------------
-st.download_button(
-    "Download Schedule",
-    data=excel_bytes,
-    file_name=f"{input_MMYY}_schedule.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+if excel_bytes:
+    st.download_button(
+        "Download Schedule",
+        data=excel_bytes,
+        file_name=f"{input_MMYY}_schedule.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 # -----------------------------
 # Add minimal CSS for wider dropdowns
