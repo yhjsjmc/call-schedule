@@ -67,12 +67,7 @@ def load_all_schedules():
     for filepath in sorted(files):
         try:
             fname = os.path.splitext(os.path.basename(filepath))[0]  # e.g. 2025-07
-            # Assuming MMYY format in the filename (e.g., 0126_schedule for January 2026)
-            month_str = fname[:2]  # First two characters for the month
-            year_str = "20" + fname[2:4]  # Next two characters for the year, prefix with '20'
-            month = int(month_str)  # Convert month to integer
-            year = int(year_str)  # Convert year to integer
-
+            year, month = map(int, fname.split("-"))
             df_raw = pd.read_excel(filepath, header=None)
             tidy = convert_schedule_to_tidy(df_raw, base_year=year, base_month=month)
             if not tidy.empty:
