@@ -67,7 +67,7 @@ if "schedule_df" not in st.session_state or st.session_state.get("loaded_month")
 df = st.session_state.schedule_df.copy()
 
 # -----------------------------
-# Display table with dropdowns
+# Assign shifts (same as before)
 # -----------------------------
 st.subheader("Assign Shifts")
 
@@ -100,16 +100,13 @@ for w, week in enumerate(weeks):
 st.session_state.schedule_df = df.copy()
 
 # -----------------------------
-# Display final dataframe
-# -----------------------------
-st.subheader("Schedule DataFrame")
-st.dataframe(df, use_container_width=True)
-
-# -----------------------------
-# Download the file
+# Generate Excel file
 # -----------------------------
 excel_bytes = df.to_excel(index=False, engine="openpyxl")
 
+# -----------------------------
+# Download button
+# -----------------------------
 st.download_button(
     "Download Schedule",
     data=excel_bytes,
