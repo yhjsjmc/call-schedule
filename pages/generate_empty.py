@@ -106,13 +106,16 @@ st.subheader("Schedule DataFrame")
 st.dataframe(df, use_container_width=True)
 
 # -----------------------------
-# Save button
+# Download the file
 # -----------------------------
-if st.button("Save Schedule to Excel"):
-    os.makedirs("schedules", exist_ok=True)
-    filename = f"schedules/{input_MMYY}_schedule.xlsx"
-    df.to_excel(filename, index=False)
-    st.success(f"Saved schedule to {filename}")
+excel_bytes = df.to_excel(index=False, engine="openpyxl")
+
+st.download_button(
+    "Download Schedule",
+    data=excel_bytes,
+    file_name=f"{input_MMYY}_schedule.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 # -----------------------------
 # Add minimal CSS for wider dropdowns
