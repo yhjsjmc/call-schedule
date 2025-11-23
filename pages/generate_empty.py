@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import calendar
+import io  # Import io module to create in-memory file
 
 st.set_page_config(page_title="Generate Empty Schedule")
 st.title("🗓️ Generate Empty Monthly Schedule")
@@ -99,23 +100,26 @@ for w, week in enumerate(weeks):
 st.session_state.schedule_df = df.copy()
 
 # -----------------------------
-# Generate Excel file
+# Generate Excel file in memory
 # -----------------------------
-try:
-    excel_bytes = df.to_excel(index=False, engine="openpyxl")
-except Exception as e:
-    st.error(f"Error generating Excel file: {e}")
+excel_file = io.BytesIO()  # Create an in-memory byte stream
+
+# Write the DataFrame to the in-memory byte stream
+with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+    df.to_excel(writer, index=False, sheet_name="Schedule")
+
+# Seek back to the beginning of the BytesIO stream before passing it to the download button
+excel_file.seek(0)
 
 # -----------------------------
 # Download button
 # -----------------------------
-if excel_bytes:
-    st.download_button(
-        "Download Schedule",
-        data=excel_bytes,
-        file_name=f"{input_MMYY}_schedule.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+st.download_button(
+    label="Download Schedule",
+    data=excel_file,
+    file_name=f"{input_MMYY}_schedule.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 # -----------------------------
 # Add minimal CSS for wider dropdowns
