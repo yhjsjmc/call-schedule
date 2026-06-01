@@ -13,7 +13,7 @@ st.title("🗓️ Generate Empty Monthly Schedule")
 input_MMYY = st.text_input("Enter month/year (MMYY)", value=datetime.today().strftime("%m%y"))
 
 weekdays = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
-shifts = ["CALL", "LATE", "EARLY", "4TH", "5TH", "POST", "VACATION", "OFF"]
+shifts = ["CALL", "LATE", "EARLY", "4TH", "5TH", "POST", "VACATION1", "VACATION2", "OFF"]
 names_all = ["", "BOSS", "BUSH", "JUNG", "KASS", "LYMAR", "VITA"]
 names_off = ["", "JUNG", "HOLIDAY"]
 
